@@ -3,6 +3,7 @@ import type { Product, ApiResponse } from './types';
 import { ProductFormModal } from './components/ProductFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { Toast } from './components/Toast';
+import { Login } from './components/Login';
 import { useDragScroll } from './hooks/useDragScroll';
 import { 
   Plus, 
@@ -15,15 +16,18 @@ import {
   Tag, 
   ShieldCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/products';
 const CATEGORIES_API_URL = API_URL.replace('/products', '/categories');
-const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN || '';
 const PAGE_SIZE = 10;
 
 export function App() {
+  // Estado de Autenticación
+  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('pachamama_admin_token'));
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,6 +55,18 @@ export function App() {
     handleMouseLeaveOrUp,
     handleMouseMove,
   } = useDragScroll();
+
+  // Guardar Token al Iniciar Sesión
+  const handleLoginSuccess = (newToken: string) => {
+    sessionStorage.setItem('pachamama_admin_token', newToken);
+    setToken(newToken);
+  };
+
+  // Cerrar Sesión
+  const handleLogout = () => {
+    sessionStorage.removeItem('pachamama_admin_token');
+    setToken(null);
+  };
 
   // Obtener categorías reales de MongoDB Atlas
   const fetchCategories = useCallback(async () => {
@@ -97,16 +113,25 @@ export function App() {
   );
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    if (token) {
+      fetchCategories();
+    }
+  }, [token, fetchCategories]);
 
   useEffect(() => {
-    setPage(1);
-    const timer = setTimeout(() => {
-      fetchProducts(1);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [selectedCategory, searchTerm, fetchProducts]);
+    if (token) {
+      setPage(1);
+      const timer = setTimeout(() => {
+        fetchProducts(1);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [token, selectedCategory, searchTerm, fetchProducts]);
+
+  // Si no está autenticado, mostramos la pantalla de Login
+  if (!token) {
+    return <Login onLoginSuccess={handleLoginSuccess} apiUrl={API_URL} />;
+  }
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
@@ -123,8 +148,9 @@ export function App() {
       const res = await fetch(url, {
         method,
         headers: {
+          'Content-[#Type]': 'application/json',
           'Content-Type': 'application/json',
-          'x-admin-token': ADMIN_TOKEN,
+          'x-admin-token': token,
         },
         body: JSON.stringify(productData),
       });
@@ -132,6 +158,10 @@ export function App() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        if (res.status === 401) {
+          handleLogout();
+          throw new Error('Sesión expirada o token inválido.');
+        }
         throw new Error(data.message || 'Error guardando producto');
       }
 
@@ -153,13 +183,17 @@ export function App() {
       const res = await fetch(`${API_URL}/${deleteCandidate.id}`, {
         method: 'DELETE',
         headers: {
-          'x-admin-token': ADMIN_TOKEN,
+          'x-admin-token': token,
         },
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        if (res.status === 401) {
+          handleLogout();
+          throw new Error('Sesión expirada o token inválido.');
+        }
         throw new Error(data.message || 'Error eliminando producto');
       }
 
@@ -197,7 +231,7 @@ export function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => {
                   fetchCategories();
@@ -214,10 +248,19 @@ export function App() {
                   setEditingProduct(null);
                   setIsModalOpen(true);
                 }}
-                className="bg-[#c85a32] hover:bg-[#b34e2a] active:scale-95 text-white font-extrabold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition cursor-pointer"
+                className="bg-[#c85a32] hover:bg-[#b34e2a] active:scale-95 text-white font-extrabold text-xs sm:text-sm px-3.5 sm:px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Nuevo Producto</span>
+                <span className="hidden sm:inline">Nuevo Producto</span>
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="text-xs font-bold hidden md:inline">Salir</span>
               </button>
             </div>
           </div>
@@ -250,7 +293,7 @@ export function App() {
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Paginación Servidor</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Sesión Segura</p>
                 <p className="text-sm font-bold text-emerald-600 flex items-center gap-1.5 mt-0.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                   Página {page} de {totalPages}
@@ -271,7 +314,6 @@ export function App() {
               />
             </div>
 
-            {/* Renderizado de TODAS las categorías traídas de MongoDB Atlas */}
             <div
               ref={dragRef}
               onMouseDown={handleMouseDown}
@@ -419,7 +461,7 @@ export function App() {
       </div>
 
       <footer className="bg-[#1b3b2b] text-emerald-100/60 text-xs text-center py-4 border-t border-[#c85a32]/20">
-        Pachamama Colorada Admin Panel • Categorías Dinámicas de BD
+        Pachamama Colorada Admin Panel • Autenticación Segura
       </footer>
 
       <ProductFormModal
