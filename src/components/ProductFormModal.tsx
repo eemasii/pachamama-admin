@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import type { Product } from '../types';
-import { CATEGORIES } from '../types';
 import { X, Loader2, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 interface ProductFormModalProps {
@@ -8,6 +7,7 @@ interface ProductFormModalProps {
   onClose: () => void;
   onSubmit: (productData: Partial<Product>) => Promise<void>;
   initialData?: Product | null;
+  categories: string[];
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
@@ -15,11 +15,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onClose,
   onSubmit,
   initialData,
+  categories,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState<string>(CATEGORIES[0]);
+  const [category, setCategory] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -30,20 +32,27 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setPrice(initialData.price.toString());
       setCategory(initialData.category);
       setImageUrl(initialData.imageUrl);
+      setCustomCategory('');
     } else {
       setTitle('');
       setDescription('');
       setPrice('');
-      setCategory(CATEGORIES[0]);
+      setCategory(categories[0] || 'General');
       setImageUrl('');
+      setCustomCategory('');
     }
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, categories]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !price || !imageUrl) return;
+    const finalCategory = category === 'NUEVA' ? customCategory.trim() : category.trim();
+
+    if (!title || !price || !imageUrl || !finalCategory) {
+      alert('Por favor completa los campos obligatorios.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -51,7 +60,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         title: title.trim(),
         description: description.trim(),
         price: Number(price),
-        category,
+        category: finalCategory,
         imageUrl: imageUrl.trim(),
       });
       onClose();
@@ -117,14 +126,31 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-white px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:border-[#c85a32]"
               >
-                {CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
                 ))}
+                <option value="NUEVA">+ Crear Nueva Categoría...</option>
               </select>
             </div>
           </div>
+
+          {category === 'NUEVA' && (
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#c85a32] mb-1.5">
+                Nombre de la Nueva Categoría *
+              </label>
+              <input
+                type="text"
+                required
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                placeholder="Ej: Aceites y Vinagres"
+                className="w-full bg-white px-4 py-2.5 border border-[#c85a32] rounded-xl text-sm focus:outline-none"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#1b3b2b] mb-1.5">
