@@ -144,14 +144,16 @@ export function App() {
   const handleSaveProduct = async (productData: Partial<Product>) => {
     try {
       const isEditing = Boolean(editingProduct);
-      const url = isEditing ? `${API_URL}/${editingProduct!._id}` : API_URL;
+      const productId = editingProduct?._id;
+
+      const url = isEditing ? `${API_URL}/${productId}` : API_URL;
       const method = isEditing ? 'PUT' : 'POST';
 
       // Construcción limpia del objeto sin enviar campos nulos ni _id
       const payload = {
         title: productData.title ? productData.title.trim() : '',
         description: productData.description ? productData.description.trim() : '',
-        price: Number(productData.price),
+        price: Number(productData.price) || 0,
         imageUrl: productData.imageUrl ? productData.imageUrl.trim() : '',
         category: productData.category ? productData.category.trim() : '',
         unit: productData.unit ? productData.unit.trim() : '1kg',
@@ -173,7 +175,10 @@ export function App() {
           handleLogout();
           throw new Error('Sesión expirada o token inválido.');
         }
-        throw new Error(data.message || 'Error guardando producto');
+
+        // Muestra en la notificación la razón exacta devuelta por el servidor
+        const detailMessage = data.error || data.message || 'Error guardando producto';
+        throw new Error(detailMessage);
       }
 
       setToast({
@@ -205,7 +210,8 @@ export function App() {
           handleLogout();
           throw new Error('Sesión expirada o token inválido.');
         }
-        throw new Error(data.message || 'Error eliminando producto');
+        const detailMessage = data.error || data.message || 'Error eliminando producto';
+        throw new Error(detailMessage);
       }
 
       setToast({ message: `"${deleteCandidate.title}" eliminado correctamente.`, type: 'success' });
