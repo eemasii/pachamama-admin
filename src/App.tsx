@@ -147,8 +147,15 @@ export function App() {
       const url = isEditing ? `${API_URL}/${editingProduct!._id}` : API_URL;
       const method = isEditing ? 'PUT' : 'POST';
 
-      // Filtrar _id para no enviarlo en el cuerpo JSON
-      const { _id, ...payload } = productData;
+      // Construcción limpia del objeto sin enviar campos nulos ni _id
+      const payload = {
+        title: productData.title ? productData.title.trim() : '',
+        description: productData.description ? productData.description.trim() : '',
+        price: Number(productData.price),
+        imageUrl: productData.imageUrl ? productData.imageUrl.trim() : '',
+        category: productData.category ? productData.category.trim() : '',
+        unit: productData.unit ? productData.unit.trim() : '1kg',
+      };
 
       const res = await fetch(url, {
         method,
