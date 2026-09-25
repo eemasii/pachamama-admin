@@ -147,13 +147,16 @@ export function App() {
       const url = isEditing ? `${API_URL}/${editingProduct!._id}` : API_URL;
       const method = isEditing ? 'PUT' : 'POST';
 
+      // Filtrar _id para no enviarlo en el cuerpo JSON
+      const { _id, ...payload } = productData;
+
       const res = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           'x-admin-token': token ? token.trim() : '',
         },
-        body: JSON.stringify(productData),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
