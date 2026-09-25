@@ -28,6 +28,7 @@ export function App() {
   // Estado de Autenticación
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem('pachamama_admin_token'));
 
+  // Estados del Catálogo de Productos
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,7 +149,6 @@ export function App() {
       const res = await fetch(url, {
         method,
         headers: {
-          'Content-[#Type]': 'application/json',
           'Content-Type': 'application/json',
           'x-admin-token': token,
         },
