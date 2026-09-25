@@ -59,8 +59,9 @@ export function App() {
 
   // Guardar Token al Iniciar Sesión
   const handleLoginSuccess = (newToken: string) => {
-    sessionStorage.setItem('pachamama_admin_token', newToken);
-    setToken(newToken);
+    const cleanToken = newToken.trim();
+    sessionStorage.setItem('pachamama_admin_token', cleanToken);
+    setToken(cleanToken);
   };
 
   // Cerrar Sesión
@@ -150,7 +151,7 @@ export function App() {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-token': token,
+          'x-admin-token': token ? token.trim() : '',
         },
         body: JSON.stringify(productData),
       });
@@ -183,7 +184,7 @@ export function App() {
       const res = await fetch(`${API_URL}/${deleteCandidate.id}`, {
         method: 'DELETE',
         headers: {
-          'x-admin-token': token,
+          'x-admin-token': token ? token.trim() : '',
         },
       });
 
