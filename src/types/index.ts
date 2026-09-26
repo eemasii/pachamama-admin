@@ -6,34 +6,18 @@ export interface Product {
   imageUrl: string;
   category: string;
   unit?: string;
-  inStock?: boolean;
-  createdAt?: string;
-}
-
-export interface PaginationMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
 }
 
 export interface ApiResponse {
   success: boolean;
+  message?: string;
+  error?: string;
   products: Product[];
-  pagination: PaginationMeta;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
 }
-
-export type Category =
-  | 'Frutos secos'
-  | 'Semillas y Cereales'
-  | 'Harinas y Legumbres'
-  | 'Suplementos y Té'
-  | 'Orgánicos';
-
-export const CATEGORIES: Category[] = [
-  'Frutos secos',
-  'Semillas y Cereales',
-  'Harinas y Legumbres',
-  'Suplementos y Té',
-  'Orgánicos',
-];

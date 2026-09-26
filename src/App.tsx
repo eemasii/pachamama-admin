@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Product, ApiResponse } from './types';
 import { ProductFormModal } from './components/ProductFormModal';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -23,6 +23,7 @@ import {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/products';
 const CATEGORIES_API_URL = API_URL.replace('/products', '/categories');
 const PAGE_SIZE = 10;
+const INACTIVITY_LIMIT_MS = 15 * 60 * 1000; // 15 minutos de inactividad
 
 export function App() {
   // Estado de Autenticación
@@ -49,6 +50,8 @@ export function App() {
     type: 'success',
   });
 
+const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const {
     ref: dragRef,
     isMouseDown,
@@ -64,16 +67,54 @@ export function App() {
     setToken(cleanToken);
   };
 
-  // Cerrar Sesión
-  const handleLogout = () => {
+  // Cerrar Sesión con mensaje opcional
+  const handleLogout = useCallback((reason?: string) => {
     sessionStorage.removeItem('pachamama_admin_token');
     setToken(null);
-  };
+    if (reason) {
+      setToast({ message: reason, type: 'error' });
+    }
+  }, []);
+
+  // --- AUTO-LOGOUT POR INACTIVIDAD (15 Minutos) ---
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (token) {
+      inactivityTimerRef.current = setTimeout(() => {
+        handleLogout('Sesión cerrada automáticamente por inactividad.');
+      }, INACTIVITY_LIMIT_MS);
+    }
+  }, [token, handleLogout]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    const handleUserActivity = () => resetInactivityTimer();
+
+    events.forEach((event) => window.addEventListener(event, handleUserActivity));
+    resetInactivityTimer();
+
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      events.forEach((event) => window.removeEventListener(event, handleUserActivity));
+    };
+  }, [token, resetInactivityTimer]);
 
   // Obtener categorías reales de MongoDB Atlas
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch(CATEGORIES_API_URL);
+      const res = await fetch(CATEGORIES_API_URL, {
+        headers: { 'x-admin-token': token ? token.trim() : '' },
+      });
+
+      if (res.status === 401) {
+        handleLogout('Sesión expirada o token inválido. Por favor ingresá nuevamente.');
+        return;
+      }
+
       const data = await res.json();
       if (data.success && Array.isArray(data.categories)) {
         setCategories(data.categories);
@@ -81,7 +122,7 @@ export function App() {
     } catch (error) {
       console.error('Error cargando categorías:', error);
     }
-  }, []);
+  }, [token, handleLogout]);
 
   // Consulta global de productos a MongoDB Atlas
   const fetchProducts = useCallback(
@@ -95,7 +136,15 @@ export function App() {
         if (selectedCategory !== 'Todas') params.append('category', selectedCategory);
         if (searchTerm.trim()) params.append('search', searchTerm.trim());
 
-        const res = await fetch(`${API_URL}?${params.toString()}`);
+        const res = await fetch(`${API_URL}?${params.toString()}`, {
+          headers: { 'x-admin-token': token ? token.trim() : '' },
+        });
+
+        if (res.status === 401) {
+          handleLogout('Sesión expirada o token inválido.');
+          return;
+        }
+
         const data: ApiResponse = await res.json();
 
         if (data.success) {
@@ -103,15 +152,15 @@ export function App() {
           setTotalPages(data.pagination.totalPages);
           setTotalProducts(data.pagination.total);
         } else {
-          throw new Error('Error en los datos');
+          throw new Error(data.message || 'Error en los datos');
         }
-      } catch (error) {
-        setToast({ message: 'Error al conectar con la base de datos.', type: 'error' });
+      } catch (error: any) {
+        setToast({ message: error.message || 'Error al conectar con la base de datos.', type: 'error' });
       } finally {
         setLoading(false);
       }
     },
-    [selectedCategory, searchTerm]
+    [token, selectedCategory, searchTerm, handleLogout]
   );
 
   useEffect(() => {
@@ -144,12 +193,9 @@ export function App() {
   const handleSaveProduct = async (productData: Partial<Product>) => {
     try {
       const isEditing = Boolean(editingProduct);
-      const productId = editingProduct?._id;
-
-      const url = isEditing ? `${API_URL}/${productId}` : API_URL;
+      const url = isEditing ? `${API_URL}/${editingProduct!._id}` : API_URL;
       const method = isEditing ? 'PUT' : 'POST';
 
-      // Construcción limpia del objeto sin enviar campos nulos ni _id
       const payload = {
         title: productData.title ? productData.title.trim() : '',
         description: productData.description ? productData.description.trim() : '',
@@ -168,15 +214,14 @@ export function App() {
         body: JSON.stringify(payload),
       });
 
+      if (res.status === 401) {
+        handleLogout('Sesión expirada o token inválido.');
+        return;
+      }
+
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        if (res.status === 401) {
-          handleLogout();
-          throw new Error('Sesión expirada o token inválido.');
-        }
-
-        // Muestra en la notificación la razón exacta devuelta por el servidor
         const detailMessage = data.error || data.message || 'Error guardando producto';
         throw new Error(detailMessage);
       }
@@ -203,13 +248,14 @@ export function App() {
         },
       });
 
+      if (res.status === 401) {
+        handleLogout('Sesión expirada o token inválido.');
+        return;
+      }
+
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        if (res.status === 401) {
-          handleLogout();
-          throw new Error('Sesión expirada o token inválido.');
-        }
         const detailMessage = data.error || data.message || 'Error eliminando producto';
         throw new Error(detailMessage);
       }
@@ -272,7 +318,7 @@ export function App() {
               </button>
 
               <button
-                onClick={handleLogout}
+                onClick={() => handleLogout()}
                 className="p-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 hover:text-white rounded-xl transition cursor-pointer flex items-center gap-1.5"
                 title="Cerrar sesión"
               >
@@ -465,7 +511,7 @@ export function App() {
                   <button
                     onClick={() => handlePageChange(page + 1)}
                     disabled={page === totalPages || loading}
-                    className="p-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 font-bold text-gray-700 cursor-pointer"
+                    className="p-2 rounded-xl border border-gray-300 bg-[#ffffff] hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 font-bold text-gray-700 cursor-pointer"
                   >
                     <span>Siguiente</span>
                     <ChevronRight className="w-4 h-4" />
