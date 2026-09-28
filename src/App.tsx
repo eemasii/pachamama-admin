@@ -50,7 +50,7 @@ export function App() {
     type: 'success',
   });
 
-const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     ref: dragRef,
@@ -504,14 +504,28 @@ const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
                     <span>Anterior</span>
                   </button>
 
-                  <span className="px-3 py-1 bg-[#1b3b2b] text-white font-bold rounded-xl">
-                    Página {page} de {totalPages}
-                  </span>
+                  {/* Selector interactivo de página */}
+                  <div className="flex items-center gap-1.5 bg-[#1b3b2b] text-white px-3 py-1.5 rounded-xl font-bold text-xs shadow-xs">
+                    <span>Página</span>
+                    <select
+                      value={page}
+                      onChange={(e) => handlePageChange(Number(e.target.value))}
+                      disabled={loading}
+                      className="bg-[#132a1e] text-white font-bold px-2 py-0.5 rounded-lg border border-white/20 focus:outline-none focus:border-[#c85a32] cursor-pointer"
+                    >
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                        <option key={p} value={p} className="bg-[#1b3b2b] text-white">
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <span>de {totalPages}</span>
+                  </div>
 
                   <button
                     onClick={() => handlePageChange(page + 1)}
                     disabled={page === totalPages || loading}
-                    className="p-2 rounded-xl border border-gray-300 bg-[#ffffff] hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 font-bold text-gray-700 cursor-pointer"
+                    className="p-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 font-bold text-gray-700 cursor-pointer"
                   >
                     <span>Siguiente</span>
                     <ChevronRight className="w-4 h-4" />
