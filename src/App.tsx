@@ -22,6 +22,7 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/products';
 const CATEGORIES_API_URL = API_URL.replace('/products', '/categories');
+const UPLOAD_API_URL = API_URL.replace('/products', '/upload');
 const PAGE_SIZE = 10;
 const INACTIVITY_LIMIT_MS = 15 * 60 * 1000; // 15 minutos de inactividad
 
@@ -547,6 +548,8 @@ export function App() {
         onSubmit={handleSaveProduct}
         initialData={editingProduct}
         categories={categories}
+        token={token}
+        uploadUrl={UPLOAD_API_URL}
       />
 
       <ConfirmModal

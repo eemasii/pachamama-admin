@@ -1,6 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Product } from '../types';
-import { X, Loader2, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { X, Loader2, Image as ImageIcon, Sparkles, Link as LinkIcon, UploadCloud } from 'lucide-react';
+
+type ImageMode = 'url' | 'file';
+type SubmitPhase = 'idle' | 'uploading' | 'saving';
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+interface UploadResponse {
+  success: boolean;
+  imageUrl?: string;
+  message?: string;
+}
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -8,6 +20,8 @@ interface ProductFormModalProps {
   onSubmit: (productData: Partial<Product>) => Promise<void>;
   initialData?: Product | null;
   categories: string[];
+  token: string | null;
+  uploadUrl: string;
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
@@ -16,6 +30,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onSubmit,
   initialData,
   categories,
+  token,
+  uploadUrl,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -23,7 +39,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [category, setCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [imageMode, setImageMode] = useState<ImageMode>('url');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [fileError, setFileError] = useState('');
+  const [phase, setPhase] = useState<SubmitPhase>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loading = phase !== 'idle';
 
   useEffect(() => {
     if (initialData) {
@@ -41,35 +65,110 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setImageUrl('');
       setCustomCategory('');
     }
+    setImageMode('url');
+    setSelectedFile(null);
+    setFileError('');
   }, [initialData, isOpen, categories]);
+
+  // Genera (y libera) la vista previa local del archivo seleccionado
+  useEffect(() => {
+    if (!selectedFile) {
+      setFilePreview('');
+      return;
+    }
+    const objectUrl = URL.createObjectURL(selectedFile);
+    setFilePreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [selectedFile]);
+
+  const handleFile = useCallback((file: File | undefined) => {
+    if (!file) return;
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setFileError('Formato no permitido. Usá JPG, PNG o WEBP.');
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError('La imagen supera el máximo de 5MB.');
+      return;
+    }
+    setFileError('');
+    setSelectedFile(file);
+  }, []);
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    handleFile(e.dataTransfer.files?.[0]);
+  };
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'x-admin-token': token ? token.trim() : '' },
+      body: formData,
+    });
+
+    const data: UploadResponse = await res.json();
+    if (!res.ok || !data.success || !data.imageUrl) {
+      throw new Error(data.message || 'No se pudo subir la imagen.');
+    }
+    return data.imageUrl;
+  };
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalCategory = category === 'NUEVA' ? customCategory.trim() : category.trim();
+    const usingFile = imageMode === 'file' && selectedFile !== null;
+    const hasImage = usingFile || (imageMode === 'url' ? Boolean(imageUrl.trim()) : Boolean(imageUrl));
 
-    if (!title || !price || !imageUrl || !finalCategory) {
+    if (!title || !price || !hasImage || !finalCategory) {
       alert('Por favor completa los campos obligatorios.');
       return;
     }
 
-    setLoading(true);
     try {
+      let finalImageUrl = imageUrl.trim();
+
+      if (usingFile && selectedFile) {
+        setPhase('uploading');
+        finalImageUrl = await uploadImage(selectedFile);
+      }
+
+      setPhase('saving');
       await onSubmit({
         title: title.trim(),
         description: description.trim(),
         price: Number(price),
         category: finalCategory,
-        imageUrl: imageUrl.trim(),
+        imageUrl: finalImageUrl,
       });
       onClose();
     } catch (error) {
       console.error(error);
+      setFileError(error instanceof Error ? error.message : 'Error al guardar el producto.');
     } finally {
-      setLoading(false);
+      setPhase('idle');
     }
   };
+
+  const tabClass = (active: boolean) =>
+    `flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+      active ? 'bg-[#1b3b2b] text-white shadow-xs' : 'text-gray-600 hover:bg-gray-200/60'
+    }`;
+
+  const submitLabel =
+    phase === 'uploading'
+      ? 'Subiendo imagen...'
+      : phase === 'saving'
+        ? 'Guardando...'
+        : initialData
+          ? 'Guardar Cambios'
+          : 'Crear Producto';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -154,37 +253,133 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#1b3b2b] mb-1.5">
-              URL de la Imagen *
+              Imagen del Producto *
             </label>
-            <input
-              type="url"
-              required
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://images.unsplash.com/..."
-              className="w-full bg-white px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-[#c85a32]"
-            />
-            {imageUrl ? (
-              <div className="mt-3 flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-200">
-                <img
-                  src={imageUrl}
-                  alt="Preview"
-                  className="w-14 h-14 object-contain rounded-xl bg-[#f3efe6] p-1 border border-gray-200"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Error+Imagen';
-                  }}
+
+            <div className="flex gap-1 bg-white p-1 rounded-xl border border-gray-200 mb-3">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setImageMode('url')}
+                className={tabClass(imageMode === 'url')}
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                Por Link (URL)
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => setImageMode('file')}
+                className={tabClass(imageMode === 'file')}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                Subir Archivo
+              </button>
+            </div>
+
+            {imageMode === 'url' ? (
+              <>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full bg-white px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:border-[#c85a32]"
                 />
-                <div className="text-xs text-gray-500 truncate">
-                  <p className="font-semibold text-gray-700">Vista previa limpia</p>
-                  <p className="truncate max-w-xs">{imageUrl}</p>
-                </div>
-              </div>
+                {imageUrl ? (
+                  <div className="mt-3 flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-200">
+                    <img
+                      src={imageUrl}
+                      alt="Preview"
+                      className="w-14 h-14 object-contain rounded-xl bg-[#f3efe6] p-1 border border-gray-200"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Error+Imagen';
+                      }}
+                    />
+                    <div className="text-xs text-gray-500 truncate">
+                      <p className="font-semibold text-gray-700">Vista previa limpia</p>
+                      <p className="truncate max-w-xs">{imageUrl}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-xs text-gray-400 flex items-center gap-1">
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Pega la URL de la foto del producto</span>
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="mt-2 text-xs text-gray-400 flex items-center gap-1">
-                <ImageIcon className="w-4 h-4" />
-                <span>Pega la URL de la foto del producto</span>
-              </div>
+              <>
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition ${
+                    isDragging
+                      ? 'border-[#c85a32] bg-[#c85a32]/5'
+                      : 'border-gray-300 bg-white hover:border-[#c85a32]'
+                  }`}
+                >
+                  <UploadCloud className="w-7 h-7 mx-auto text-[#c85a32]" />
+                  <p className="mt-1.5 text-sm font-semibold text-gray-700">
+                    Arrastrá una imagen o tocá para seleccionar
+                  </p>
+                  <p className="text-xs text-gray-400">JPG, PNG o WEBP • máx. 5MB</p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+
+                {selectedFile && filePreview ? (
+                  <div className="mt-3 flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-200">
+                    <img
+                      src={filePreview}
+                      alt="Preview"
+                      className="w-14 h-14 object-contain rounded-xl bg-[#f3efe6] p-1 border border-gray-200"
+                    />
+                    <div className="text-xs text-gray-500 truncate flex-1">
+                      <p className="font-semibold text-gray-700">Se subirá al guardar</p>
+                      <p className="truncate max-w-xs">
+                        {selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => setSelectedFile(null)}
+                      className="p-1.5 text-gray-400 hover:text-[#c85a32] rounded-full cursor-pointer"
+                      title="Quitar archivo"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  imageUrl && (
+                    <div className="mt-3 flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-200">
+                      <img
+                        src={imageUrl}
+                        alt="Imagen actual"
+                        className="w-14 h-14 object-contain rounded-xl bg-[#f3efe6] p-1 border border-gray-200"
+                      />
+                      <p className="text-xs text-gray-500">Imagen actual (se conserva si no subís otra)</p>
+                    </div>
+                  )
+                )}
+              </>
             )}
+
+            {fileError && <p className="mt-2 text-xs font-semibold text-red-600">{fileError}</p>}
           </div>
 
           <div>
@@ -204,6 +399,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              disabled={loading}
               className="px-5 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200/60 rounded-xl transition cursor-pointer"
             >
               Cancelar
@@ -211,10 +407,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 text-sm font-extrabold text-white bg-[#c85a32] hover:bg-[#b34e2a] rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
+              className="px-6 py-2.5 text-sm font-extrabold text-white bg-[#c85a32] hover:bg-[#b34e2a] disabled:opacity-70 rounded-xl shadow-md transition flex items-center gap-2 cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{initialData ? 'Guardar Cambios' : 'Crear Producto'}</span>
+              <span>{submitLabel}</span>
             </button>
           </div>
         </form>
