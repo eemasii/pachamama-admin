@@ -1,7 +1,7 @@
-﻿import type { Product } from '../types';
+import type { Product } from '../types';
 import { useDragScroll } from '../hooks/useDragScroll';
 import { PAGE_SIZE } from '../hooks/useProducts';
-import { Edit2, Trash2, Search, Package, Tag, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Barcode, Edit2, Trash2, Search, Package, Tag, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ProductsManagerProps {
   products: Product[];
@@ -68,7 +68,7 @@ export function ProductsManager({
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar en toda la base..."
+            placeholder="Buscar por nombre o escanear código..."
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full bg-[#f7f4ed] pl-10 pr-4 py-2 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-[#c85a32]"
@@ -122,6 +122,12 @@ export function ProductsManager({
                     />
                     <div>
                       <p className="font-bold text-gray-800">{product.title}</p>
+                      {product.barcode && (
+                        <span className="inline-flex items-center gap-1 mt-0.5 text-[11px] font-mono text-[#1b3b2b] bg-[#f7f4ed] border border-[#e28763]/40 rounded-md px-1.5 py-0.5">
+                          <Barcode className="w-3 h-3 text-[#c85a32]" />
+                          {product.barcode}
+                        </span>
+                      )}
                       {product.description && (
                         <p className="text-xs text-gray-400 truncate max-w-xs">{product.description}</p>
                       )}

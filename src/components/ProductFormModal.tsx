@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Product } from '../types';
-import { X, Loader2, Image as ImageIcon, Sparkles, Link as LinkIcon, UploadCloud } from 'lucide-react';
+import { X, Loader2, Barcode, Image as ImageIcon, Sparkles, Link as LinkIcon, UploadCloud } from 'lucide-react';
 
 type ImageMode = 'url' | 'file';
 type SubmitPhase = 'idle' | 'uploading' | 'saving';
@@ -37,6 +37,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imageMode, setImageMode] = useState<ImageMode>('url');
@@ -54,6 +55,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setTitle(initialData.title);
       setDescription(initialData.description || '');
       setPrice(initialData.price.toString());
+      setBarcode(initialData.barcode || '');
       setCategory(initialData.category);
       setImageUrl(initialData.imageUrl);
       setCustomCategory('');
@@ -61,6 +63,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setTitle('');
       setDescription('');
       setPrice('');
+      setBarcode('');
       setCategory(categories[0] || 'General');
       setImageUrl('');
       setCustomCategory('');
@@ -146,6 +149,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         price: Number(price),
         category: finalCategory,
         imageUrl: finalImageUrl,
+        barcode: barcode.trim(),
       });
       onClose();
     } catch (error) {
@@ -380,6 +384,24 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             )}
 
             {fileError && <p className="mt-2 text-xs font-semibold text-red-600">{fileError}</p>}
+          </div>
+
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#1b3b2b] mb-1.5">
+              <Barcode className="w-4 h-4 text-[#c85a32]" />
+              Código de Barras (Opcional)
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.preventDefault();
+              }}
+              placeholder="Escaneá o escribí el código (dejar vacío si se vende suelto)"
+              className="w-full bg-white px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-mono focus:outline-none focus:border-[#c85a32]"
+            />
           </div>
 
           <div>

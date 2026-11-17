@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Product, ApiResponse } from '../types';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/products';
@@ -102,6 +102,7 @@ export function useProducts(token: string | null, logout: (reason?: string) => v
         imageUrl: productData.imageUrl ? productData.imageUrl.trim() : '',
         category: productData.category ? productData.category.trim() : '',
         unit: productData.unit ? productData.unit.trim() : '1kg',
+        barcode: productData.barcode ? productData.barcode.trim() : '',
       };
       const res = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',

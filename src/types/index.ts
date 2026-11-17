@@ -6,6 +6,7 @@ export interface Product {
   imageUrl: string;
   category: string;
   unit?: string;
+  barcode?: string;
 }
 
 export interface ApiResponse {

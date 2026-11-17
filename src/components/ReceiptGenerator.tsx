@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { Product as CatalogProduct } from '../types';
-import { Printer, Plus, Trash2, Search, ShoppingBag } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, ShoppingBag, Barcode } from 'lucide-react';
 
 
 interface CartItem {
@@ -14,6 +14,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  barcode?: string;
 }
 
 interface ReceiptGeneratorProps {
@@ -22,12 +23,16 @@ interface ReceiptGeneratorProps {
 
 export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ products: catalog }) => {
   const products = useMemo<Product[]>(
-    () => catalog.map((p) => ({ id: p._id, name: p.title, price: p.price })),
+    () => catalog.map((p) => ({ id: p._id, name: p.title, price: p.price, barcode: p.barcode?.trim() || undefined })),
     [catalog]
   );
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [scanValue, setScanValue] = useState('');
+  const [scanError, setScanError] = useState('');
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const scanErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customQuantity, setCustomQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'Efectivo' | 'Transferencia' | 'Débito / Crédito'>('Efectivo');
   const [ticketNumber, setTicketNumber] = useState<number>(() => Math.floor(1000 + Math.random() * 9000));
@@ -39,21 +44,14 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ products: ca
     );
   }, [products, searchTerm]);
 
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProductId) return;
-
-    const prod = products.find(p => p.id === selectedProductId);
-    if (!prod) return;
-
+  const addToCart = (prod: Product, qty: number) => {
     const prodId = prod.id;
-
     setCart(prev => {
       const existing = prev.find(item => item.id === prodId);
       if (existing) {
         return prev.map(item =>
           item.id === prodId
-            ? { ...item, quantity: Number((item.quantity + customQuantity).toFixed(3)) }
+            ? { ...item, quantity: Number((item.quantity + qty).toFixed(3)) }
             : item
         );
       }
@@ -61,13 +59,41 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ products: ca
         id: prodId,
         name: prod.name,
         price: prod.price,
-        quantity: customQuantity
+        quantity: qty
       }];
     });
+  };
 
+  const handleAddItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductId) return;
+    const prod = products.find(p => p.id === selectedProductId);
+    if (!prod) return;
+
+    addToCart(prod, customQuantity);
     setSelectedProductId('');
     setSearchTerm('');
     setCustomQuantity(1);
+  };
+
+  const handleScanKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = scanValue.trim();
+    if (!code) return;
+
+    if (scanErrorTimer.current) clearTimeout(scanErrorTimer.current);
+    const prod = products.find(p => p.barcode === code);
+    if (prod) {
+      addToCart(prod, 1);
+      setScanError('');
+      setScanValue('');
+    } else {
+      setScanError('Código no encontrado en la base de datos');
+      setScanValue('');
+      scanErrorTimer.current = setTimeout(() => setScanError(''), 3000);
+    }
+    scanInputRef.current?.focus();
   };
 
   const handleUpdateQuantity = (id: string, delta: number) => {
@@ -138,8 +164,30 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ products: ca
           </div>
         </div>
 
+        {/* Escáner de código de barras */}
+        <div className="mt-5">
+          <label className="block text-xs font-semibold text-stone-700 mb-1">Escanear código de barras (Enter)</label>
+          <div className="relative">
+            <Barcode className="w-4 h-4 absolute left-3 top-2.5 text-[#c85a32]" />
+            <input
+              ref={scanInputRef}
+              type="text"
+              autoFocus
+              autoComplete="off"
+              placeholder="Escanear código de barras (Enter)..."
+              value={scanValue}
+              onChange={(e) => setScanValue(e.target.value)}
+              onKeyDown={handleScanKeyDown}
+              className={`w-full pl-9 pr-3 py-2 text-sm font-mono border rounded-xl focus:outline-none focus:ring-2 ${
+                scanError ? 'border-red-400 focus:ring-red-400' : 'border-stone-200 focus:ring-[#1b3b2b]'
+              }`}
+            />
+          </div>
+          {scanError && <p className="mt-1 text-xs font-semibold text-red-600">{scanError}</p>}
+        </div>
+
         {/* Buscador y Carga */}
-        <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-5 items-end">
+        <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-4 items-end">
           <div className="md:col-span-4">
             <label className="block text-xs font-semibold text-stone-700 mb-1">Filtrar producto</label>
             <div className="relative">
